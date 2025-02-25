@@ -73,14 +73,22 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 const text = e.target.result;
-                const lines = text.split('\n').filter(line => line.trim());
+                const lines = text
+                    .replace(/\r\n|\r|\n/g, '\n')
+                    .split('\n')
+                    .filter(line => line.trim());
+                
                 const processedLines = lines.map(line => {
                     const columns = line.split(delimiter);
                     if (columns.length <= columnIndex) return line;
-
-                    const categories = columns[columnIndex].split(categoryDelimiter);
-                    columns[columnIndex] = categories.reverse().join(categoryDelimiter);
                     
+                    const categories = columns[columnIndex]
+                        .trim()
+                        .split(categoryDelimiter)
+                        .map(cat => cat.trim())
+                        .filter(cat => cat);
+                    
+                    columns[columnIndex] = categories.reverse().join(categoryDelimiter);
                     return columns.join(delimiter);
                 });
 
@@ -95,7 +103,7 @@
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
             };
-            reader.readAsText(fileInput.files[0]);
+            reader.readAsText(fileInput.files[0], 'UTF-8');
         }
     </script>
 </body>
