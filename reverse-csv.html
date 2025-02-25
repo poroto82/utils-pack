@@ -73,10 +73,8 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 const text = e.target.result;
-                const lines = text.split('\n');
+                const lines = text.split('\n').filter(line => line.trim());
                 const processedLines = lines.map(line => {
-                    if (!line.trim()) return line;
-                    
                     const columns = line.split(delimiter);
                     if (columns.length <= columnIndex) return line;
 
@@ -86,8 +84,7 @@
                     return columns.join(delimiter);
                 });
 
-                // Create and download the processed file
-                const processedContent = processedLines.join('\n');
+                const processedContent = processedLines.join('\r\n');
                 const blob = new Blob([processedContent], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
