@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Category Tree Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .file-input {
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 5px;
+            flex: 1;
+        }
+        .tree-container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 5px;
+            flex: 2;
+            min-height: 400px;
+        }
+        .tree-node {
+            margin: 5px 0;
+            padding: 5px;
+        }
+        .tree-node span {
+            cursor: pointer;
+            padding: 2px 5px;
+        }
+        .tree-node span:hover {
+            background-color: #f0f0f0;
+        }
+        .tree-children {
+            margin-left: 20px;
+            border-left: 1px dotted #ccc;
+            padding-left: 10px;
+        }
+        .editing {
+            background-color: #fff;
+            border: 1px solid #999;
+            padding: 2px 5px;
+        }
+        .controls {
+            margin-top: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="file-input">
+            <h2>Input CSV</h2>
+            <div>
+                <input type="file" id="csvFile" accept=".csv">
+            </div>
+            <div class="controls">
+                <button onclick="loadFile()">Load Categories</button>
+                <button onclick="saveTree()">Save Changes</button>
+            </div>
+        </div>
+        <div class="tree-container">
+            <h2>Category Tree</h2>
+            <div id="categoryTree"></div>
+        </div>
+    </div>
+
+    <script>
+        let categoryData = new Map();
+        let originalData = []; // Nuevo array para mantener los datos originales
+
+        function loadFile() {
+            const fileInput = document.getElementById('csvFile');
+            if (!fileInput.files.length) {
+                alert('Please select a file');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                processCSV(text);
+            };
+            reader.readAsText(fileInput.files[0], 'ISO-8859-1');
+        }
+
+        function processCSV(text) {
+            categoryData.clear();
+            originalData = []; // Limpiamos los datos originales
+            const lines = text.split('\n').filter(line => line.trim());
+            
+            lines.forEach(line => {
+                const [id, categories] = line.split(';');
+                if (categories) {
+                    // Guardamos la línea original
+                    originalData.push({
+                        id: id,
+                        categories: categories.trim()
+                    });
+
+                    // Construimos el árbol para visualización
+                    const cats = categories.split('&').map(c => c.trim());
+                    let currentMap = categoryData;
+                    cats.forEach(cat => {
+                        if (!currentMap.has(cat)) {
+                            currentMap.set(cat, new Map());
+                        }
+                        currentMap = currentMap.get(cat);
+                    });
+                }
+            });
+
+            renderTree();
+        }
+
+        function renderTree() {
+            const container = document.getElementById('categoryTree');
+            container.innerHTML = '';
+            renderNode(categoryData, container);
+        }
+
+        function renderNode(node, container) {
+            node.forEach((value, key) => {
+                const nodeDiv = document.createElement('div');
+                nodeDiv.className = 'tree-node';
+                
+                const span = document.createElement('span');
+                span.textContent = key;
+                span.onclick = () => startEditing(span);
+                nodeDiv.appendChild(span);
+
+                if (value.size > 0) {
+                    const childrenDiv = document.createElement('div');
+                    childrenDiv.className = 'tree-children';
+                    renderNode(value, childrenDiv);
+                    nodeDiv.appendChild(childrenDiv);
+                }
+
+                container.appendChild(nodeDiv);
+            });
+        }
+
+        function startEditing(element) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = element.textContent;
+            input.className = 'editing';
+            input.dataset.originalValue = element.textContent; // Guardamos el valor original
+            
+            input.onblur = () => finishEditing(input, element);
+            input.onkeypress = (e) => {
+                if (e.key === 'Enter') {
+                    finishEditing(input, element);
+                }
+            };
+
+            element.parentNode.replaceChild(input, element);
+            input.focus();
+        }
+
+        function finishEditing(input, originalElement) {
+            const newValue = input.value.trim();
+            const oldValue = input.dataset.originalValue;
+            
+            if (newValue !== oldValue) {
+                // Actualizar el árbol con el nuevo valor
+                updateTreeData(oldValue, newValue);
+            }
+            
+            originalElement.textContent = newValue;
+            input.parentNode.replaceChild(originalElement, input);
+        }
+
+        function updateTreeData(oldValue, newValue) {
+            // Función auxiliar para actualizar un Map anidado
+            function updateMap(map) {
+                if (map.has(oldValue)) {
+                    const subtree = map.get(oldValue);
+                    map.delete(oldValue);
+                    map.set(newValue, subtree);
+                    return true;
+                }
+                
+                for (let [key, value] of map.entries()) {
+                    if (updateMap(value)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            
+            updateMap(categoryData);
+            
+            // Actualizar también los datos originales
+            originalData.forEach(item => {
+                const categories = item.categories.split('&').map(c => c.trim());
+                const index = categories.findIndex(c => c === oldValue);
+                if (index !== -1) {
+                    categories[index] = newValue;
+                    item.categories = categories.join('&');
+                }
+            });
+        }
+
+        function updateCategoriesFromTree(originalCategories) {
+            let currentMap = categoryData;
+            const updatedCategories = [];
+            
+            for (const originalCat of originalCategories) {
+                let found = false;
+                for (let [key, value] of currentMap.entries()) {
+                    // Comparación más flexible para encontrar la categoría correspondiente
+                    if (key.toLowerCase() === originalCat.toLowerCase()) {
+                        updatedCategories.push(key);
+                        currentMap = value;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // Si no encontramos la categoría, mantenemos la original
+                    updatedCategories.push(originalCat);
+                }
+            }
+            
+            return updatedCategories;
+        }
+
+        function saveTree() {
+            const modifiedLines = [];
+            
+            // Recorremos los datos originales y actualizamos las categorías
+            originalData.forEach(item => {
+                const categories = item.categories.split('&').map(c => c.trim());
+                // Aquí deberías implementar la lógica para obtener las categorías modificadas
+                // basándote en el árbol actual
+                const modifiedCategories = updateCategoriesFromTree(categories);
+                modifiedLines.push(`${item.id};${modifiedCategories.join('&')}`);
+            });
+            
+            // Crear el contenido del CSV
+            const csvContent = modifiedLines.join('\r\n');
+            
+            // Crear y descargar el archivo
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=windows-1252' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'modified_categories.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+    </script>
+</body>
+</html> 
